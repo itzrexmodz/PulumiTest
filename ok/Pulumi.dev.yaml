@@ -1,7 +1,0 @@
-config:
-  azure-native:location: WestUS
-  pulumi:template: serverless-azure-yaml
-  serverless-azure-yaml:appPath: ./app
-  serverless-azure-yaml:errorDocument: error.html
-  serverless-azure-yaml:indexDocument: index.html
-  serverless-azure-yaml:sitePath: ./www
