@@ -1,0 +1,132 @@
+name: serverless-azure-yaml
+runtime: yaml
+description: A Pulumi YAML program to deploy a serverless application on Azure
+# Import the program's configuration settings.
+config:
+  appPath:
+    type: string
+    default: ./app
+  errorDocument:
+    type: string
+    default: error.html
+  indexDocument:
+    type: string
+    default: index.html
+  pulumi:tags:
+    value:
+      pulumi:template: serverless-azure-yaml
+  sitePath:
+    type: string
+    default: ./www
+# Export the URLs of the website and serverless endpoint.
+outputs:
+  apiURL: https://${app.defaultHostName}/api
+  originURL: ${account.primaryEndpoints.web}
+resources:
+  # Create a blob storage account.
+  account:
+    properties:
+      kind: StorageV2
+      resourceGroupName: ${resource-group.name}
+      sku:
+        name: Standard_LRS
+    type: azure-native:storage:StorageAccount
+  # Create the Function App.
+  app:
+    properties:
+      kind: FunctionApp
+      resourceGroupName: ${resource-group.name}
+      serverFarmId: ${plan.id}
+      siteConfig:
+        appSettings:
+          - name: FUNCTIONS_WORKER_RUNTIME
+            value: python
+          - name: FUNCTIONS_EXTENSION_VERSION
+            value: "~3"
+          - name: WEBSITE_RUN_FROM_PACKAGE
+            value: https://${account.name}.blob.core.windows.net/${app-container.name}/${app-blob.name}?${signature.serviceSasToken}
+        cors:
+          allowedOrigins:
+            - "*"
+    type: azure-native:web:WebApp
+  # Upload the serverless app to the storage container.
+  app-blob:
+    properties:
+      accountName: ${account.name}
+      containerName: ${app-container.name}
+      resourceGroupName: ${resource-group.name}
+      source: ${appArchive}
+      type: Block
+    type: azure-native:storage:Blob
+  # Create a storage container for the serverless app.
+  app-container:
+    properties:
+      accountName: ${account.name}
+      publicAccess: None
+      resourceGroupName: ${resource-group.name}
+    type: azure-native:storage:BlobContainer
+  # Create a JSON configuration file for the website.
+  config.json:
+    properties:
+      accountName: ${account.name}
+      containerName: ${website.containerName}
+      contentType: application/json
+      resourceGroupName: ${resource-group.name}
+      source: ${configFile}
+      type: Block
+    type: azure-native:storage:Blob
+  # Create an App Service plan for the Function App.
+  plan:
+    properties:
+      kind: Linux
+      reserved: true
+      resourceGroupName: ${resource-group.name}
+      sku:
+        name: Y1
+        tier: Dynamic
+    type: azure-native:web:AppServicePlan
+  # Create a resource group for the website.
+  resource-group:
+    type: azure-native:resources:ResourceGroup
+  # Use a synced folder to manage the files of the website.
+  synced-folder:
+    properties:
+      containerName: ${website.containerName}
+      path: ${sitePath}
+      resourceGroupName: ${resource-group.name}
+      storageAccountName: ${account.name}
+    type: synced-folder:index:AzureBlobFolder
+  # Create a storage container for the pages of the website.
+  website:
+    properties:
+      accountName: ${account.name}
+      error404Document: ${errorDocument}
+      indexDocument: ${indexDocument}
+      resourceGroupName: ${resource-group.name}
+    type: azure-native:storage:StorageAccountStaticWebsite
+variables:
+  # Create a FileArchive containing the contents of the app folder.
+  appArchive:
+    fn::fileArchive: ${appPath}
+  # Create a StringAsset resource to convert the JSON string into a file.
+  configFile:
+    fn::stringAsset: ${configJSON}
+  # Create a JSON string containing the URL of the serverless app.
+  configJSON:
+    fn::toJSON:
+      api: https://${app.defaultHostName}/api
+  # Create a shared access signature allowing access to function storage.
+  signature:
+    fn::azure-native:storage:listStorageAccountServiceSAS:
+      accountName: ${account.name}
+      cacheControl: max-age=5
+      canonicalizedResource: /blob/${account.name}/${app-container.name}
+      contentDisposition: inline
+      contentEncoding: deflate
+      contentType: application/json
+      permissions: r
+      protocols: https
+      resource: c
+      resourceGroupName: ${resource-group.name}
+      sharedAccessExpiryTime: "2030-01-01"
+      sharedAccessStartTime: "2022-01-01"
