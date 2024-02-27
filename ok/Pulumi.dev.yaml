@@ -1,0 +1,5 @@
+config:
+  aiven-python:cloudName: google-europe-west1
+  aiven-python:planName: business-4
+  aiven-python:serviceName: kafka-gcp-eu
+  pulumi:template: aiven-python
